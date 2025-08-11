@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Game Canvas</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- Main game container -->
+    <div id="gameContainer">
+        <!-- Canvas element with fallback content -->
+        <canvas id="gameCanvas" width="800" height="600">
+            Your browser does not support HTML5 Canvas. Please upgrade to a modern browser.
+        </canvas>
+    </div>
+
+    <!-- Load polyfills first -->
+    <script src="js/polyfills.js"></script>
+
+    <!-- Load core game scripts -->
+    <script src="js/renderer.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/particles.js"></script>
+    <script src="js/animations.js"></script>
+    <script src="js/game.js"></script>
+
+    <script>
+        // Initialize canvas and context when the page loads
+        window.addEventListener('load', function() {
+            const canvas = document.getElementById('gameCanvas');
+            
+            // Ensure canvas is supported
+            if (!canvas || !canvas.getContext) {
+                console.error('Canvas is not supported in this browser');
+                return;
+            }
+
+            // Get the rendering context
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.error('Failed to get 2D context');
+                return;
+            }
+
+            // Set up high DPI canvas if needed
+            function setupHighDPI() {
+                const dpr = window.devicePixelRatio || 1;
+                const rect = canvas.getBoundingClientRect();
+
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = rect.height + 'px';
+
+                ctx.scale(dpr, dpr);
+            }
+
+            // Call high DPI setup
+            setupHighDPI();
+
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                setupHighDPI();
+            });
+        });
+    </script>
+</body>
+</html>
