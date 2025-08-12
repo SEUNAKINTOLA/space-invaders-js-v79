@@ -1,205 +1,197 @@
 /**
- * Manages audio playback and background music with fade transitions
+ * @fileoverview Audio Manager Module
+ * Handles loading, caching, and playing sound effects and background music
+ * with proper resource management and error handling.
+ * 
+ * @module managers/AudioManager
+ */
+
+/**
+ * Supported audio formats and their MIME types
+ * @const {Object}
+ */
+const AUDIO_FORMATS = {
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg'
+};
+
+/**
+ * Default audio settings
+ * @const {Object}
+ */
+const DEFAULT_SETTINGS = {
+    masterVolume: 0.7,
+    sfxVolume: 1.0,
+    musicVolume: 0.5,
+    maxConcurrentSounds: 8
+};
+
+/**
+ * Manages all audio operations in the game
  */
 class AudioManager {
     constructor() {
-        this.musicTracks = new Map();
-        this.currentTrack = null;
-        this.currentVolume = 1.0;
-        this.isFading = false;
-        this.fadeInterval = null;
+        if (AudioManager.instance) {
+            return AudioManager.instance;
+        }
+        AudioManager.instance = this;
 
-        // Default fade duration in milliseconds
-        this.defaultFadeDuration = 2000;
-        
-        // Initialize audio context when first user interaction occurs
+        this.initialized = false;
         this.audioContext = null;
-        this.initializeOnInteraction = this.initializeOnInteraction.bind(this);
-        document.addEventListener('click', this.initializeOnInteraction, { once: true });
+        this.soundCache = new Map();
+        this.activeSounds = new Set();
+        this.settings = { ...DEFAULT_SETTINGS };
+        
+        this.init();
     }
 
     /**
-     * Initializes Web Audio API context on first user interaction
+     * Initialize the audio system
+     * @returns {Promise<void>}
      */
-    initializeOnInteraction() {
+    async init() {
         try {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            // Check for Web Audio API support
+            if (typeof AudioContext !== 'undefined') {
+                this.audioContext = new AudioContext();
+            } else if (typeof webkitAudioContext !== 'undefined') {
+                this.audioContext = new webkitAudioContext();
+            } else {
+                throw new Error('Web Audio API not supported');
+            }
+
+            this.masterGain = this.audioContext.createGain();
+            this.masterGain.connect(this.audioContext.destination);
+            this.masterGain.gain.value = this.settings.masterVolume;
+
+            this.initialized = true;
         } catch (error) {
-            console.error('Web Audio API not supported:', error);
+            console.error('Failed to initialize AudioManager:', error);
+            this.initialized = false;
         }
     }
 
     /**
-     * Loads a music track and stores it for later use
-     * @param {string} trackId - Unique identifier for the track
-     * @param {string} audioPath - Path to the audio file
-     * @returns {Promise} Promise that resolves when the track is loaded
+     * Load an audio file and cache it
+     * @param {string} id - Unique identifier for the sound
+     * @param {string} url - URL of the audio file
+     * @returns {Promise<AudioBuffer>}
      */
-    async loadTrack(trackId, audioPath) {
-        try {
-            const response = await fetch(audioPath);
-            const arrayBuffer = await response.arrayBuffer();
-            const audioBuffer = await this.audioContext?.decodeAudioData(arrayBuffer);
+    async loadSound(id, url) {
+        if (!this.initialized) {
+            throw new Error('AudioManager not initialized');
+        }
 
-            const track = {
-                buffer: audioBuffer,
-                source: null,
-                gainNode: this.audioContext?.createGain()
+        try {
+            if (this.soundCache.has(id)) {
+                return this.soundCache.get(id);
+            }
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            
+            this.soundCache.set(id, audioBuffer);
+            return audioBuffer;
+        } catch (error) {
+            console.error(`Failed to load sound ${id}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Play a sound effect
+     * @param {string} id - Sound identifier
+     * @param {Object} options - Playback options
+     * @returns {Promise<void>}
+     */
+    async playSound(id, options = {}) {
+        if (!this.initialized || !this.soundCache.has(id)) {
+            return;
+        }
+
+        try {
+            // Limit concurrent sounds
+            if (this.activeSounds.size >= this.settings.maxConcurrentSounds) {
+                return;
+            }
+
+            const buffer = this.soundCache.get(id);
+            const source = this.audioContext.createBufferSource();
+            const gainNode = this.audioContext.createGain();
+
+            source.buffer = buffer;
+            source.connect(gainNode);
+            gainNode.connect(this.masterGain);
+
+            // Apply options
+            gainNode.gain.value = (options.volume || 1) * this.settings.sfxVolume;
+            source.loop = options.loop || false;
+            
+            // Track active sounds
+            this.activeSounds.add(source);
+
+            // Cleanup when sound ends
+            source.onended = () => {
+                this.activeSounds.delete(source);
+                source.disconnect();
+                gainNode.disconnect();
             };
 
-            this.musicTracks.set(trackId, track);
+            source.start(0);
         } catch (error) {
-            console.error(`Failed to load track ${trackId}:`, error);
+            console.error(`Failed to play sound ${id}:`, error);
         }
     }
 
     /**
-     * Plays a background music track with optional fade in
-     * @param {string} trackId - ID of the track to play
-     * @param {boolean} fadeIn - Whether to fade in the track
-     * @param {number} [fadeDuration] - Duration of fade in milliseconds
+     * Update volume settings
+     * @param {Object} settings - New volume settings
      */
-    playMusic(trackId, fadeIn = true, fadeDuration = this.defaultFadeDuration) {
-        if (!this.audioContext) {
-            console.warn('Audio context not initialized');
-            return;
-        }
+    updateSettings(settings = {}) {
+        this.settings = {
+            ...this.settings,
+            ...settings
+        };
 
-        const track = this.musicTracks.get(trackId);
-        if (!track) {
-            console.error(`Track ${trackId} not found`);
-            return;
-        }
-
-        // Stop current track if playing
-        if (this.currentTrack) {
-            this.stopMusic(true, fadeDuration);
-        }
-
-        // Create and configure new audio source
-        track.source = this.audioContext.createBufferSource();
-        track.source.buffer = track.buffer;
-        track.source.loop = true;
-
-        // Connect nodes
-        track.source.connect(track.gainNode);
-        track.gainNode.connect(this.audioContext.destination);
-
-        // Set initial volume
-        if (fadeIn) {
-            track.gainNode.gain.value = 0;
-            this.fadeIn(track, fadeDuration);
-        } else {
-            track.gainNode.gain.value = this.currentVolume;
-        }
-
-        // Start playback
-        track.source.start(0);
-        this.currentTrack = track;
-    }
-
-    /**
-     * Stops the currently playing music track
-     * @param {boolean} fadeOut - Whether to fade out the track
-     * @param {number} [fadeDuration] - Duration of fade in milliseconds
-     */
-    stopMusic(fadeOut = true, fadeDuration = this.defaultFadeDuration) {
-        if (!this.currentTrack) return;
-
-        if (fadeOut) {
-            this.fadeOut(this.currentTrack, fadeDuration);
-        } else {
-            this.currentTrack.source?.stop();
-            this.currentTrack = null;
+        if (this.masterGain) {
+            this.masterGain.gain.value = this.settings.masterVolume;
         }
     }
 
     /**
-     * Fades in a music track
-     * @param {Object} track - Track object to fade in
-     * @param {number} duration - Duration of fade in milliseconds
+     * Stop all currently playing sounds
      */
-    fadeIn(track, duration) {
-        if (this.isFading) {
-            clearInterval(this.fadeInterval);
-        }
-
-        const steps = 60;
-        const stepTime = duration / steps;
-        const volumeStep = this.currentVolume / steps;
-        let currentStep = 0;
-
-        this.isFading = true;
-        this.fadeInterval = setInterval(() => {
-            currentStep++;
-            const newVolume = volumeStep * currentStep;
-            track.gainNode.gain.value = newVolume;
-
-            if (currentStep >= steps) {
-                clearInterval(this.fadeInterval);
-                this.isFading = false;
+    stopAll() {
+        this.activeSounds.forEach(source => {
+            try {
+                source.stop();
+            } catch (error) {
+                console.warn('Error stopping sound:', error);
             }
-        }, stepTime);
+        });
+        this.activeSounds.clear();
     }
 
     /**
-     * Fades out a music track
-     * @param {Object} track - Track object to fade out
-     * @param {number} duration - Duration of fade in milliseconds
+     * Clean up resources
      */
-    fadeOut(track, duration) {
-        if (this.isFading) {
-            clearInterval(this.fadeInterval);
-        }
-
-        const steps = 60;
-        const stepTime = duration / steps;
-        const volumeStep = track.gainNode.gain.value / steps;
-        let currentStep = steps;
-
-        this.isFading = true;
-        this.fadeInterval = setInterval(() => {
-            currentStep--;
-            const newVolume = volumeStep * currentStep;
-            track.gainNode.gain.value = newVolume;
-
-            if (currentStep <= 0) {
-                clearInterval(this.fadeInterval);
-                this.isFading = false;
-                track.source?.stop();
-                this.currentTrack = null;
-            }
-        }, stepTime);
-    }
-
-    /**
-     * Sets the master volume for all music
-     * @param {number} volume - Volume level (0.0 to 1.0)
-     */
-    setVolume(volume) {
-        this.currentVolume = Math.max(0, Math.min(1, volume));
-        if (this.currentTrack) {
-            this.currentTrack.gainNode.gain.value = this.currentVolume;
-        }
-    }
-
-    /**
-     * Pauses the currently playing music
-     */
-    pauseMusic() {
+    dispose() {
+        this.stopAll();
+        this.soundCache.clear();
         if (this.audioContext) {
-            this.audioContext.suspend();
+            this.audioContext.close();
         }
-    }
-
-    /**
-     * Resumes the currently playing music
-     */
-    resumeMusic() {
-        if (this.audioContext) {
-            this.audioContext.resume();
-        }
+        this.initialized = false;
     }
 }
 
-export default AudioManager;
+// Create singleton instance
+const audioManager = new AudioManager();
+
+export default audioManager;
