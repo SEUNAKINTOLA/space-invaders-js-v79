@@ -1,0 +1,177 @@
+/* Base styles and resets */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    /* Define common variables for consistent theming */
+    --primary-color: #333;
+    --secondary-color: #666;
+    --text-color: #fff;
+    --background-color: #000;
+    --spacing-unit: 1rem;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: Arial, sans-serif;
+}
+
+/* Game container - mobile first approach */
+#game-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Canvas styling */
+#game-canvas {
+    width: 100%;
+    height: 100%;
+    touch-action: none; /* Prevent default touch behaviors */
+}
+
+/* UI Elements */
+.ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: var(--spacing-unit);
+    pointer-events: none; /* Allow clicks to pass through to canvas */
+}
+
+.score-display {
+    font-size: 1.2rem;
+    margin: var(--spacing-unit);
+}
+
+/* Touch controls for mobile */
+.touch-controls {
+    position: absolute;
+    bottom: var(--spacing-unit);
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: var(--spacing-unit);
+    pointer-events: auto;
+}
+
+.touch-button {
+    width: 3rem;
+    height: 3rem;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    touch-action: none;
+}
+
+/* High score display */
+.high-score {
+    position: absolute;
+    top: var(--spacing-unit);
+    right: var(--spacing-unit);
+    font-size: 1rem;
+}
+
+/* Menu overlays */
+.menu-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    padding: calc(var(--spacing-unit) * 2);
+    border-radius: 8px;
+    text-align: center;
+}
+
+/* Media Queries */
+/* Small tablets and large phones */
+@media screen and (min-width: 600px) {
+    .touch-button {
+        width: 4rem;
+        height: 4rem;
+    }
+
+    .score-display {
+        font-size: 1.5rem;
+    }
+}
+
+/* Tablets and small laptops */
+@media screen and (min-width: 768px) {
+    #game-container {
+        max-width: 90vw;
+        max-height: 90vh;
+        margin: auto;
+    }
+
+    .touch-controls {
+        max-width: 80%;
+        margin: 0 auto;
+    }
+}
+
+/* Desktop and larger screens */
+@media screen and (min-width: 1024px) {
+    #game-container {
+        max-width: 80vw;
+        max-height: 80vh;
+    }
+
+    /* Hide touch controls on desktop */
+    .touch-controls {
+        display: none;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+    #game-container {
+        flex-direction: row;
+    }
+
+    .touch-controls {
+        flex-direction: column;
+        height: 100%;
+        width: auto;
+        right: var(--spacing-unit);
+        left: auto;
+    }
+}
+
+/* High DPI screens */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    /* Adjust borders and fine details for retina displays */
+    .touch-button {
+        border-width: 1px;
+    }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Print styles */
+@media print {
+    #game-container {
+        display: none;
+    }
+}
